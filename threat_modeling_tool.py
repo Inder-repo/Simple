@@ -2,7 +2,12 @@ import streamlit as st
 import json
 import pandas as pd
 import base64
-from streamlit_graphviz import streamlit_graphviz
+try:
+    from streamlit_agraph import agraph, Node, Edge, Config
+    AGRAPH_AVAILABLE = True
+except ImportError:
+    AGRAPH_AVAILABLE = False
+    st.warning("Visual diagramming is unavailable because 'streamlit-agraph' is not installed. Please ensure it is included in requirements.txt.")
 
 # Streamlit App Configuration
 st.set_page_config(page_title="Enterprise Threat Modeling Tool", layout="wide")
@@ -143,18 +148,17 @@ def create_download_link(data, filename, label):
         href = f'<a href="data:text/csv;base64,{b64}" download="{filename}">{label}</a>'
     return href
 
-def generate_dot_graph():
-    """Generate a Graphviz DOT string from components and flows."""
-    dot = ["digraph G {", "  rankdir=LR;"]
+def generate_graph():
+    """Generate nodes and edges for streamlit-agraph from components and flows."""
+    nodes = []
+    edges = []
     # Add components as nodes
     for component in st.session_state.components:
-        node_label = f"{component['name']}\\n({component['trust_boundary']})"
-        dot.append(f"  \"{component['name']}\" [label=\"{node_label}\", shape=box];")
+        nodes.append(Node(id=component['name'], label=f"{component['name']}\n({component['trust_boundary']})", shape="box"))
     # Add flows as edges
     for flow in st.session_state.flows:
-        dot.append(f"  \"{flow['source']}\" -> \"{flow['destination']}\" [label=\"{flow['name']} (ID: {flow['id']})\"];")
-    dot.append("}")
-    return "\n".join(dot)
+        edges.append(Edge(source=flow['source'], target=flow['destination'], label=f"{flow['name']} (ID: {flow['id']})"))
+    return nodes, edges
 
 def main():
     st.title("Enterprise Threat Modeling Tool")
@@ -214,12 +218,13 @@ def main():
                 st.success(f"Added flow: {flow_name} ({flow_source} -> {flow_destination})")
 
     st.subheader("Visual Data Flow Diagram")
-    if st.session_state.components or st.session_state.flows:
-        dot_graph = generate_dot_graph()
-        streamlit_graphviz(dot_graph, key="graphviz_diagram")
+    if AGRAPH_AVAILABLE and (st.session_state.components or st.session_state.flows):
+        nodes, edges = generate_graph()
+        config = Config(width=500, height=300, directed=True, physics=True, hierarchical=False)
+        agraph(nodes=nodes, edges=edges, config=config)
         st.markdown("The diagram above auto-populates based on components and flows. Components are boxes, and flows are labeled arrows.")
     else:
-        st.markdown("No components or flows added yet. Add them above to see the visual diagram.")
+        st.markdown("No components or flows added yet, or visual diagramming is unavailable. Add them above to see the visual diagram.")
 
     st.subheader("Current Diagram (Text)")
     if st.session_state.components or st.session_state.flows:
