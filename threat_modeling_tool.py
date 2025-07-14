@@ -2,14 +2,7 @@ import streamlit as st
 import json
 import pandas as pd
 import base64
-
-# Try to import streamlit-drawable-canvas, with fallback
-try:
-    from streamlit_drawable_canvas import st_canvas
-    CANVAS_AVAILABLE = True
-except ImportError:
-    CANVAS_AVAILABLE = False
-    st.warning("Visual diagramming is unavailable because 'streamlit-drawable-canvas' is not installed. Please ensure it is included in requirements.txt.")
+from streamlit_graphviz import streamlit_graphviz
 
 # Streamlit App Configuration
 st.set_page_config(page_title="Enterprise Threat Modeling Tool", layout="wide")
@@ -150,9 +143,22 @@ def create_download_link(data, filename, label):
         href = f'<a href="data:text/csv;base64,{b64}" download="{filename}">{label}</a>'
     return href
 
+def generate_dot_graph():
+    """Generate a Graphviz DOT string from components and flows."""
+    dot = ["digraph G {", "  rankdir=LR;"]
+    # Add components as nodes
+    for component in st.session_state.components:
+        node_label = f"{component['name']}\\n({component['trust_boundary']})"
+        dot.append(f"  \"{component['name']}\" [label=\"{node_label}\", shape=box];")
+    # Add flows as edges
+    for flow in st.session_state.flows:
+        dot.append(f"  \"{flow['source']}\" -> \"{flow['destination']}\" [label=\"{flow['name']} (ID: {flow['id']})\"];")
+    dot.append("}")
+    return "\n".join(dot)
+
 def main():
     st.title("Enterprise Threat Modeling Tool")
-    st.markdown("Follow the OWASP Threat Modeling Process to create a threat model. Load a sample model or create your own with visual diagramming.", help="This tool supports STRIDE-based threat modeling with CAPEC mappings and export options.")
+    st.markdown("Follow the OWASP Threat Modeling Process to create a threat model. Load a sample model or create your own with automated visual diagramming.", help="This tool supports STRIDE-based threat modeling with CAPEC mappings and export options.")
 
     # Load Sample Model
     st.header("Load Sample Threat Model")
@@ -178,7 +184,7 @@ def main():
 
     # Step 1: Diagram the Application
     st.header("Step 1: Diagram the Application")
-    st.markdown("Define components and data flows. Use the canvas (if available) to draw a Data Flow Diagram (DFD).", help="Add components and flows below, then use the canvas to visualize them. Drag to draw entities and arrows.")
+    st.markdown("Define components and data flows. The visual diagram below auto-populates based on your inputs.", help="Add components and flows below to define the system. The diagram will update automatically.")
 
     col1, col2 = st.columns(2)
     
@@ -208,21 +214,14 @@ def main():
                 st.success(f"Added flow: {flow_name} ({flow_source} -> {flow_destination})")
 
     st.subheader("Visual Data Flow Diagram")
-    if CANVAS_AVAILABLE:
-        canvas_result = st_canvas(
-            fill_color="rgba(0, 165, 255, 0.3)",
-            stroke_width=2,
-            stroke_color="black",
-            background_color="#eee",
-            height=300,
-            drawing_mode="freedraw",
-            key="canvas"
-        )
-        st.markdown("Draw components (rectangles) and flows (arrows) above. Use text inputs to define details.")
+    if st.session_state.components or st.session_state.flows:
+        dot_graph = generate_dot_graph()
+        streamlit_graphviz(dot_graph, key="graphviz_diagram")
+        st.markdown("The diagram above auto-populates based on components and flows. Components are boxes, and flows are labeled arrows.")
     else:
-        st.markdown("Visual diagramming is unavailable. Use text inputs below to define components and flows.")
+        st.markdown("No components or flows added yet. Add them above to see the visual diagram.")
 
-    st.subheader("Current Diagram")
+    st.subheader("Current Diagram (Text)")
     if st.session_state.components or st.session_state.flows:
         diagram = "Components:\n" + "\n".join([f"- {c['name']} (Trust Boundary: {c['trust_boundary']})" for c in st.session_state.components])
         diagram += "\n\nData Flows:\n" + "\n".join([f"- {f['name']} (ID: {f['id']}): {f['source']} -> {f['destination']}" for f in st.session_state.flows])
