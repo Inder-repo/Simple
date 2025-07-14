@@ -1,8 +1,15 @@
 import streamlit as st
 import json
 import pandas as pd
-from streamlit_drawable_canvas import st_canvas
 import base64
+
+# Try to import streamlit-drawable-canvas, with fallback
+try:
+    from streamlit_drawable_canvas import st_canvas
+    CANVAS_AVAILABLE = True
+except ImportError:
+    CANVAS_AVAILABLE = False
+    st.warning("Visual diagramming is unavailable because 'streamlit-drawable-canvas' is not installed. Please ensure it is included in requirements.txt.")
 
 # Streamlit App Configuration
 st.set_page_config(page_title="Enterprise Threat Modeling Tool", layout="wide")
@@ -24,7 +31,7 @@ if 'flow_counter' not in st.session_state:
 # Predefined trust boundaries
 PREDEFINED_TRUST_BOUNDARIES = ["Public Network", "Internal Network", "DMZ", "Database Layer", "Application Layer"]
 
-# Extended STRIDE threats with CAPEC mappings
+# STRIDE threats with CAPEC mappings
 STRIDE_THREATS = {
     "Spoofing": {
         "description": "Pretending to be something or someone else.",
@@ -145,11 +152,11 @@ def create_download_link(data, filename, label):
 
 def main():
     st.title("Enterprise Threat Modeling Tool")
-    st.markdown("Follow the OWASP Threat Modeling Process to create a threat model. Load a sample model or create your own with visual diagramming.")
+    st.markdown("Follow the OWASP Threat Modeling Process to create a threat model. Load a sample model or create your own with visual diagramming.", help="This tool supports STRIDE-based threat modeling with CAPEC mappings and export options.")
 
     # Load Sample Model
     st.header("Load Sample Threat Model")
-    st.markdown("Select a sample model to explore or choose 'None' to start fresh.", help="Sample models include pre-filled components, flows, threats, and mitigations.")
+    st.markdown("Select a sample model to explore or choose 'None' to start fresh.", help="Sample models include pre-filled components, flows, threats, and mitigations for common systems.")
     sample_model = st.selectbox("Select a Sample Model", ["None"] + list(SAMPLE_MODELS.keys()))
     if st.button("Load Sample Model"):
         if sample_model != "None":
@@ -171,7 +178,7 @@ def main():
 
     # Step 1: Diagram the Application
     st.header("Step 1: Diagram the Application")
-    st.markdown("Define components and data flows. Use the canvas to draw a Data Flow Diagram (DFD).", help="Add components and flows below, then use the canvas to visualize them. Drag to draw entities and arrows.")
+    st.markdown("Define components and data flows. Use the canvas (if available) to draw a Data Flow Diagram (DFD).", help="Add components and flows below, then use the canvas to visualize them. Drag to draw entities and arrows.")
 
     col1, col2 = st.columns(2)
     
@@ -201,16 +208,19 @@ def main():
                 st.success(f"Added flow: {flow_name} ({flow_source} -> {flow_destination})")
 
     st.subheader("Visual Data Flow Diagram")
-    canvas_result = st_canvas(
-        fill_color="rgba(0, 165, 255, 0.3)",
-        stroke_width=2,
-        stroke_color="black",
-        background_color="#eee",
-        height=300,
-        drawing_mode="freedraw",
-        key="canvas"
-    )
-    st.markdown("Draw components (rectangles) and flows (arrows) above. Use text inputs to define details.")
+    if CANVAS_AVAILABLE:
+        canvas_result = st_canvas(
+            fill_color="rgba(0, 165, 255, 0.3)",
+            stroke_width=2,
+            stroke_color="black",
+            background_color="#eee",
+            height=300,
+            drawing_mode="freedraw",
+            key="canvas"
+        )
+        st.markdown("Draw components (rectangles) and flows (arrows) above. Use text inputs to define details.")
+    else:
+        st.markdown("Visual diagramming is unavailable. Use text inputs below to define components and flows.")
 
     st.subheader("Current Diagram")
     if st.session_state.components or st.session_state.flows:
