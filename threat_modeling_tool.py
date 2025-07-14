@@ -1,10 +1,13 @@
 import streamlit as st
 import json
+import pandas as pd
+from streamlit_drawable_canvas import st_canvas
+import base64
 
 # Streamlit App Configuration
-st.set_page_config(page_title="OWASP Threat Modeling Tool", layout="wide")
+st.set_page_config(page_title="Enterprise Threat Modeling Tool", layout="wide")
 
-# Initialize session state for storing model data
+# Initialize session state
 if 'components' not in st.session_state:
     st.session_state.components = []
 if 'flows' not in st.session_state:
@@ -21,14 +24,44 @@ if 'flow_counter' not in st.session_state:
 # Predefined trust boundaries
 PREDEFINED_TRUST_BOUNDARIES = ["Public Network", "Internal Network", "DMZ", "Database Layer", "Application Layer"]
 
-# STRIDE threats and mitigations
+# Extended STRIDE threats with CAPEC mappings
 STRIDE_THREATS = {
-    "Spoofing": {"description": "Pretending to be something or someone else.", "mitigation": "Implement strong authentication mechanisms (e.g., MFA).", "frameworks": {"NIST 800-53": "IA-2, IA-5", "OWASP Top 10": "A07:2021 - Identification and Authentication Failures"}},
-    "Tampering": {"description": "Unauthorized modification of data.", "mitigation": "Use integrity checks (e.g., hashes, digital signatures).", "frameworks": {"NIST 800-53": "SI-7", "OWASP Top 10": "A05:2021 - Security Misconfiguration"}},
-    "Repudiation": {"description": "Denying an action occurred.", "mitigation": "Implement logging and audit trails.", "frameworks": {"NIST 800-53": "AU-2, AU-3", "OWASP Top 10": "A09:2021 - Security Logging and Monitoring Failures"}},
-    "Information Disclosure": {"description": "Unauthorized access to data.", "mitigation": "Encrypt sensitive data in transit and at rest.", "frameworks": {"NIST 800-53": "SC-8, SC-28", "OWASP Top 10": "A02:2021 - Cryptographic Failures"}},
-    "Denial of Service": {"description": "Disrupting service availability.", "mitigation": "Implement rate limiting and redundancy.", "frameworks": {"NIST 800-53": "SC-5", "OWASP Top 10": "A04:2021 - Insecure Design"}},
-    "Elevation of Privilege": {"description": "Gaining unauthorized access levels.", "mitigation": "Enforce least privilege and role-based access control.", "frameworks": {"NIST 800-53": "AC-6", "OWASP Top 10": "A01:2021 - Broken Access Control"}}
+    "Spoofing": {
+        "description": "Pretending to be something or someone else.",
+        "mitigation": "Implement strong authentication mechanisms (e.g., MFA).",
+        "frameworks": {"NIST 800-53": "IA-2, IA-5", "OWASP Top 10": "A07:2021 - Identification and Authentication Failures"},
+        "capec": "CAPEC-151: Identity Spoofing"
+    },
+    "Tampering": {
+        "description": "Unauthorized modification of data.",
+        "mitigation": "Use integrity checks (e.g., hashes, digital signatures).",
+        "frameworks": {"NIST 800-53": "SI-7", "OWASP Top 10": "A05:2021 - Security Misconfiguration"},
+        "capec": "CAPEC-26: Data Tampering"
+    },
+    "Repudiation": {
+        "description": "Denying an action occurred.",
+        "mitigation": "Implement logging and audit trails.",
+        "frameworks": {"NIST 800-53": "AU-2, AU-3", "OWASP Top 10": "A09:2021 - Security Logging and Monitoring Failures"},
+        "capec": "CAPEC-93: Log Injection"
+    },
+    "Information Disclosure": {
+        "description": "Unauthorized access to data.",
+        "mitigation": "Encrypt sensitive data in transit and at rest.",
+        "frameworks": {"NIST 800-53": "SC-8, SC-28", "OWASP Top 10": "A02:2021 - Cryptographic Failures"},
+        "capec": "CAPEC-116: Data Interception"
+    },
+    "Denial of Service": {
+        "description": "Disrupting service availability.",
+        "mitigation": "Implement rate limiting and redundancy.",
+        "frameworks": {"NIST 800-53": "SC-5", "OWASP Top 10": "A04:2021 - Insecure Design"},
+        "capec": "CAPEC-125: Resource Depletion"
+    },
+    "Elevation of Privilege": {
+        "description": "Gaining unauthorized access levels.",
+        "mitigation": "Enforce least privilege and role-based access control.",
+        "frameworks": {"NIST 800-53": "AC-6", "OWASP Top 10": "A01:2021 - Broken Access Control"},
+        "capec": "CAPEC-233: Privilege Escalation"
+    }
 }
 
 # Sample threat models
@@ -45,9 +78,9 @@ SAMPLE_MODELS = {
         ],
         "trust_boundaries": ["Public Network", "DMZ", "Database Layer"],
         "threats": [
-            {"flow_id": 1, "flow": "HTTP Request", "threat": "Spoofing", "description": STRIDE_THREATS["Spoofing"]["description"], "mitigation": "Use MFA and session tokens", "frameworks": STRIDE_THREATS["Spoofing"]["frameworks"]},
-            {"flow_id": 1, "flow": "HTTP Request", "threat": "Information Disclosure", "description": STRIDE_THREATS["Information Disclosure"]["description"], "mitigation": "Use HTTPS with TLS 1.3", "frameworks": STRIDE_THREATS["Information Disclosure"]["frameworks"]},
-            {"flow_id": 2, "flow": "SQL Query", "threat": "Tampering", "description": STRIDE_THREATS["Tampering"]["description"], "mitigation": "Use parameterized queries", "frameworks": STRIDE_THREATS["Tampering"]["frameworks"]}
+            {"flow_id": 1, "flow": "HTTP Request", "threat": "Spoofing", "description": STRIDE_THREATS["Spoofing"]["description"], "mitigation": "Use MFA and session tokens", "frameworks": STRIDE_THREATS["Spoofing"]["frameworks"], "capec": STRIDE_THREATS["Spoofing"]["capec"]},
+            {"flow_id": 1, "flow": "HTTP Request", "threat": "Information Disclosure", "description": STRIDE_THREATS["Information Disclosure"]["description"], "mitigation": "Use HTTPS with TLS 1.3", "frameworks": STRIDE_THREATS["Information Disclosure"]["frameworks"], "capec": STRIDE_THREATS["Information Disclosure"]["capec"]},
+            {"flow_id": 2, "flow": "SQL Query", "threat": "Tampering", "description": STRIDE_THREATS["Tampering"]["description"], "mitigation": "Use parameterized queries", "frameworks": STRIDE_THREATS["Tampering"]["frameworks"], "capec": STRIDE_THREATS["Tampering"]["capec"]}
         ],
         "mitigations": [
             {"flow_id": 1, "flow": "HTTP Request", "threat": "Spoofing", "mitigation": "Use MFA and session tokens"},
@@ -67,8 +100,8 @@ SAMPLE_MODELS = {
         ],
         "trust_boundaries": ["Public Network", "Internal Network", "Application Layer"],
         "threats": [
-            {"flow_id": 1, "flow": "Sensor Data", "threat": "Spoofing", "description": STRIDE_THREATS["Spoofing"]["description"], "mitigation": "Device certificate-based authentication", "frameworks": STRIDE_THREATS["Spoofing"]["frameworks"]},
-            {"flow_id": 1, "flow": "Sensor Data", "threat": "Denial of Service", "description": STRIDE_THREATS["Denial of Service"]["description"], "mitigation": "Implement rate limiting on device", "frameworks": STRIDE_THREATS["Denial of Service"]["frameworks"]}
+            {"flow_id": 1, "flow": "Sensor Data", "threat": "Spoofing", "description": STRIDE_THREATS["Spoofing"]["description"], "mitigation": "Device certificate-based authentication", "frameworks": STRIDE_THREATS["Spoofing"]["frameworks"], "capec": STRIDE_THREATS["Spoofing"]["capec"]},
+            {"flow_id": 1, "flow": "Sensor Data", "threat": "Denial of Service", "description": STRIDE_THREATS["Denial of Service"]["description"], "mitigation": "Implement rate limiting on device", "frameworks": STRIDE_THREATS["Denial of Service"]["frameworks"], "capec": STRIDE_THREATS["Denial of Service"]["capec"]}
         ],
         "mitigations": [
             {"flow_id": 1, "flow": "Sensor Data", "threat": "Spoofing", "mitigation": "Device certificate-based authentication"},
@@ -87,8 +120,8 @@ SAMPLE_MODELS = {
         ],
         "trust_boundaries": ["Public Network", "DMZ", "Application Layer"],
         "threats": [
-            {"flow_id": 1, "flow": "API Request", "threat": "Elevation of Privilege", "description": STRIDE_THREATS["Elevation of Privilege"]["description"], "mitigation": "Use OAuth 2.0 with scope restrictions", "frameworks": STRIDE_THREATS["Elevation of Privilege"]["frameworks"]},
-            {"flow_id": 1, "flow": "API Request", "threat": "Denial of Service", "description": STRIDE_THREATS["Denial of Service"]["description"], "mitigation": "Rate limiting at API Gateway", "frameworks": STRIDE_THREATS["Denial of Service"]["frameworks"]}
+            {"flow_id": 1, "flow": "API Request", "threat": "Elevation of Privilege", "description": STRIDE_THREATS["Elevation of Privilege"]["description"], "mitigation": "Use OAuth 2.0 with scope restrictions", "frameworks": STRIDE_THREATS["Elevation of Privilege"]["frameworks"], "capec": STRIDE_THREATS["Elevation of Privilege"]["capec"]},
+            {"flow_id": 1, "flow": "API Request", "threat": "Denial of Service", "description": STRIDE_THREATS["Denial of Service"]["description"], "mitigation": "Rate limiting at API Gateway", "frameworks": STRIDE_THREATS["Denial of Service"]["frameworks"], "capec": STRIDE_THREATS["Denial of Service"]["capec"]}
         ],
         "mitigations": [
             {"flow_id": 1, "flow": "API Request", "threat": "Elevation of Privilege", "mitigation": "Use OAuth 2.0 with scope restrictions"},
@@ -97,12 +130,26 @@ SAMPLE_MODELS = {
     }
 }
 
+def create_download_link(data, filename, label):
+    """Generate a download link for JSON or CSV data."""
+    if filename.endswith('.json'):
+        data_str = json.dumps(data, indent=2)
+        b64 = base64.b64encode(data_str.encode()).decode()
+        href = f'<a href="data:application/json;base64,{b64}" download="{filename}">{label}</a>'
+    elif filename.endswith('.csv'):
+        df = pd.DataFrame(data)
+        csv = df.to_csv(index=False)
+        b64 = base64.b64encode(csv.encode()).decode()
+        href = f'<a href="data:text/csv;base64,{b64}" download="{filename}">{label}</a>'
+    return href
+
 def main():
-    st.title("OWASP Threat Modeling Teaching Tool")
-    st.markdown("Follow the OWASP Threat Modeling Process to create a threat model. Complete each step or load a sample model to explore.")
+    st.title("Enterprise Threat Modeling Tool")
+    st.markdown("Follow the OWASP Threat Modeling Process to create a threat model. Load a sample model or create your own with visual diagramming.")
 
     # Load Sample Model
     st.header("Load Sample Threat Model")
+    st.markdown("Select a sample model to explore or choose 'None' to start fresh.", help="Sample models include pre-filled components, flows, threats, and mitigations.")
     sample_model = st.selectbox("Select a Sample Model", ["None"] + list(SAMPLE_MODELS.keys()))
     if st.button("Load Sample Model"):
         if sample_model != "None":
@@ -124,14 +171,14 @@ def main():
 
     # Step 1: Diagram the Application
     st.header("Step 1: Diagram the Application")
-    st.markdown("Define components (e.g., User, Server) and data flows (e.g., User -> Server). Select or define trust boundaries.")
-    
+    st.markdown("Define components and data flows. Use the canvas to draw a Data Flow Diagram (DFD).", help="Add components and flows below, then use the canvas to visualize them. Drag to draw entities and arrows.")
+
     col1, col2 = st.columns(2)
     
     with col1:
         st.subheader("Add Component")
-        component_name = st.text_input("Component Name (e.g., User, Server)")
-        trust_boundary = st.selectbox("Select Trust Boundary", PREDEFINED_TRUST_BOUNDARIES + ["Custom"])
+        component_name = st.text_input("Component Name (e.g., User, Server)", help="Enter a unique name for the component.")
+        trust_boundary = st.selectbox("Select Trust Boundary", PREDEFINED_TRUST_BOUNDARIES + ["Custom"], help="Choose a trust boundary or define a custom one.")
         custom_boundary = st.text_input("Custom Trust Boundary (if selected)", disabled=trust_boundary != "Custom")
         if st.button("Add Component"):
             if component_name:
@@ -145,13 +192,25 @@ def main():
         st.subheader("Add Data Flow")
         flow_source = st.selectbox("Source Component", [c["name"] for c in st.session_state.components], key="flow_source")
         flow_destination = st.selectbox("Destination Component", [c["name"] for c in st.session_state.components], key="flow_destination")
-        flow_name = st.text_input("Flow Name (e.g., HTTP Request)")
+        flow_name = st.text_input("Flow Name (e.g., HTTP Request)", help="Name the data flow (e.g., API Request).")
         if st.button("Add Data Flow"):
             if flow_source and flow_destination and flow_name:
                 st.session_state.flow_counter += 1
                 flow_id = st.session_state.flow_counter
                 st.session_state.flows.append({"id": flow_id, "name": flow_name, "source": flow_source, "destination": flow_destination})
                 st.success(f"Added flow: {flow_name} ({flow_source} -> {flow_destination})")
+
+    st.subheader("Visual Data Flow Diagram")
+    canvas_result = st_canvas(
+        fill_color="rgba(0, 165, 255, 0.3)",
+        stroke_width=2,
+        stroke_color="black",
+        background_color="#eee",
+        height=300,
+        drawing_mode="freedraw",
+        key="canvas"
+    )
+    st.markdown("Draw components (rectangles) and flows (arrows) above. Use text inputs to define details.")
 
     st.subheader("Current Diagram")
     if st.session_state.components or st.session_state.flows:
@@ -163,7 +222,7 @@ def main():
 
     # Step 2: Identify Threats
     st.header("Step 2: Identify Threats")
-    st.markdown("Analyze the diagram using the STRIDE framework to identify potential threats.")
+    st.markdown("Analyze the diagram using the STRIDE framework to identify potential threats.", help="STRIDE identifies Spoofing, Tampering, Repudiation, Information Disclosure, Denial of Service, and Elevation of Privilege threats.")
     if st.button("Run STRIDE Analysis"):
         st.session_state.threats = []
         for flow in st.session_state.flows:
@@ -179,24 +238,27 @@ def main():
                         "threat": threat,
                         "description": details["description"],
                         "mitigation": details["mitigation"],
-                        "frameworks": details["frameworks"]
+                        "frameworks": details["frameworks"],
+                        "capec": details["capec"]
                     })
         st.success("STRIDE analysis completed.")
 
     # Step 3: Review Threats and Mitigations
     st.header("Step 3: Review Threats and Mitigations")
-    st.markdown("Review the identified threats and their mitigations. Each threat is mapped to NIST 800-53 and OWASP Top 10.")
+    st.markdown("Review identified threats, mitigations, and security framework mappings. Add custom mitigations as needed.", help="Each threat includes CAPEC mappings and suggested mitigations.")
     if st.session_state.threats:
         for idx, threat in enumerate(st.session_state.threats):
             with st.expander(f"Threat: {threat['threat']} on {threat['flow']} (Flow ID: {threat['flow_id']})"):
                 st.write(f"**Description**: {threat['description']}")
-                st.write(f"**Mitigation**: {threat['mitigation']}")
+                st.write(f"**Default Mitigation**: {threat['mitigation']}")
+                st.write(f"**CAPEC Mapping**: {threat['capec']}")
                 st.write(f"**Security Frameworks**:")
                 st.write(f"- NIST 800-53: {threat['frameworks']['NIST 800-53']}")
                 st.write(f"- OWASP Top 10: {threat['frameworks']['OWASP Top 10']}")
                 custom_mitigation = st.text_input(
                     f"Custom Mitigation for {threat['threat']} on {threat['flow']}",
-                    key=f"mit_{threat['flow_id']}_{threat['threat']}_{idx}"
+                    key=f"mit_{threat['flow_id']}_{threat['threat']}_{idx}",
+                    help="Override the default mitigation if needed."
                 )
                 if custom_mitigation:
                     threat["mitigation"] = custom_mitigation
@@ -212,10 +274,10 @@ def main():
 
     # Step 4: Validate the Model
     st.header("Step 4: Validate the Model")
-    st.markdown("Review the model for completeness. Ensure all components, flows, threats, and mitigations are defined.")
+    st.markdown("Review the model for completeness. Ensure all components, flows, threats, and mitigations are defined.", help="Validation checks for missing elements.")
     if st.button("Validate Model"):
         validation = []
-        if st not in st.session_state.components:
+        if not st.session_state.components:
             validation.append("No components defined. Add components in Step 1.")
         if not st.session_state.flows:
             validation.append("No data flows defined. Add flows in Step 1.")
@@ -238,6 +300,13 @@ def main():
         }
         st.subheader("Final Threat Model")
         st.json(output)
+        
+        # Download options
+        st.subheader("Export Threat Model")
+        st.markdown(create_download_link(output, "threat_model.json", "Download as JSON"), unsafe_allow_html=True)
+        if st.session_state.threats:
+            threat_data = [{"Flow": t["flow"], "Threat": t["threat"], "Description": t["description"], "Mitigation": t["mitigation"], "CAPEC": t["capec"], "NIST 800-53": t["frameworks"]["NIST 800-53"], "OWASP Top 10": t["frameworks"]["OWASP Top 10"]} for t in st.session_state.threats]
+            st.markdown(create_download_link(threat_data, "threats.csv", "Download Threats as CSV"), unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
